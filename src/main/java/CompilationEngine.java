@@ -75,7 +75,7 @@ public class CompilationEngine {
         if (tokenizer.tokenType() == TokenType.KEYWORD) {
             handleKeyword(KeywordType.VOID, KeywordType.INT, KeywordType.BOOLEAN, KeywordType.CHAR);
         } else {
-            handleIdentifier(); // class name as return type
+            handleIdentifier(); // class/object name as return type
         }
         
         handleIdentifier(); // subroutine name
