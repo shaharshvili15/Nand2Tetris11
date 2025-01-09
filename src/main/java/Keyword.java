@@ -1,0 +1,23 @@
+public enum Keyword {
+    CLASS,
+    CONSTRUCTOR,
+    FUNCTION,
+    METHOD,
+    VAR,
+    INT,
+    CHAR,
+    BOOLEAN,
+    VOID,
+    TRUE,
+    FALSE,
+    NULL,
+    THIS,
+    LET,
+    DO,
+    IF,
+    ELSE,
+    WHILE,
+    RETURN,
+    STATIC,
+    FIELD
+}
