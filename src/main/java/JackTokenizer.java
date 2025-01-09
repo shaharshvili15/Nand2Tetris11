@@ -46,10 +46,6 @@ public class JackTokenizer {
         currentTokenBuilder = new StringBuilder(); // Reset the current token
         currentTokenType = null; // Reset the current token type
 
-        // Debug: Show current character
-        System.out.println("Current char: '" + currentChar + "' (ASCII: " + (int)currentChar + ")");
-  // end debug 
-
         if (isSymbol(currentChar)) {
             currentTokenType = TokenType.SYMBOL;
             handleSymbol();
@@ -64,9 +60,6 @@ public class JackTokenizer {
         }
 
         currentToken = currentTokenBuilder.toString();
-        // Debug: Show token info
-        System.out.println("Token: '" + currentToken + "' Type: " + currentTokenType);
-        // end debug
     }
 
     private void skipWhitespaceAndComments() throws IOException {
