@@ -1,5 +1,5 @@
 public enum KeywordType {
-    CLASS,
+    CLASS ,
     CONSTRUCTOR,
     FUNCTION,
     METHOD,
