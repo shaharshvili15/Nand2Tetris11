@@ -22,19 +22,19 @@ public class JackTokenizer {
     }
 
     private void readChar() throws IOException {
-        int readChar = bReader.read();
-        currentChar = (readChar == -1) ? '\0' : (char)readChar;
+        int charAsInt = bReader.read();
+        currentChar = (charAsInt == -1) ? '\0' : (char)charAsInt; // '/0' as null for char
     }
 
     public boolean hasMoreTokens() {
-        return currentChar != '\0';
+        return (currentChar != '\0');
     }
 
     public void advance() throws IOException {
         skipWhitespaceAndComments();
         if (!hasMoreTokens()) return;
 
-        currentTokenBuilder.setLength(0); // Clear the builder
+        currentTokenBuilder = new StringBuilder();; // Reset the current token
 
         if (isSymbol(currentChar)) {
             handleSymbol();
