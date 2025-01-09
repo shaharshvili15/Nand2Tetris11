@@ -13,6 +13,13 @@ public class CompilationEngine {
         tokenizer = new JackTokenizer(inputFile);
         writer = new PrintWriter(new FileWriter(outputFile));
         indentLevel = 0;
+        
+        // Get the first token before starting compilation
+        if (tokenizer.hasMoreTokens()) {
+            tokenizer.advance();
+        } else {
+            throw new IOException("Empty file: " + inputFile);
+        }
     }
 
     /**
@@ -30,12 +37,9 @@ public class CompilationEngine {
                 compileClassVarDec();
             } else if (isSubroutine()) {
                 compileSubroutine();
-            } else {
-                handleSymbol('}');
-                break;
             }
         }
-
+        writeSymbol('}');  // Handle the final closing brace when we find it
         closeExp("class");
         writer.close();
     }
@@ -54,7 +58,7 @@ public class CompilationEngine {
         compileVarName();
         
         // additional var names
-        while (tokenizer.symbol() == ',') {
+        while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
             handleSymbol(',');
             compileVarName();
         }
@@ -68,6 +72,8 @@ public class CompilationEngine {
      * Compiles a complete method, function, or constructor.
      */
     public void compileSubroutine() throws IOException {
+        openExp("subroutineDec");
+        
         // subroutine declaration
         handleKeyword(KeywordType.CONSTRUCTOR, KeywordType.FUNCTION, KeywordType.METHOD);
         
@@ -84,13 +90,18 @@ public class CompilationEngine {
         handleSymbol(')');
         
         compileSubroutineBody();
+        
+        closeExp("subroutineDec");
     }
 
     /**
      * Compiles a (possibly empty) parameter list. Does not handle the enclosing parentheses.
      */
     public void compileParameterList() throws IOException {
-        if (tokenizer.symbol() == ')') {
+        openExp("parameterList");
+        
+        if (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ')') {
+            closeExp("parameterList");
             return; // empty parameter list
         }
 
@@ -99,17 +110,21 @@ public class CompilationEngine {
         compileVarName();
 
         // Additional parameters
-        while (tokenizer.symbol() == ',') {
+        while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
             handleSymbol(',');
             compileType();
             compileVarName();
         }
+        
+        closeExp("parameterList");
     }
 
     /**
      * Compiles a subroutine's body.
      */
     public void compileSubroutineBody() throws IOException {
+        openExp("subroutineBody");
+        
         handleSymbol('{');
         
         // Local variables
@@ -119,12 +134,16 @@ public class CompilationEngine {
         
         compileStatements();
         handleSymbol('}');
+        
+        closeExp("subroutineBody");
     }
 
     /**
      * Compiles a var declaration.
      */
     public void compileVarDec() throws IOException {
+        openExp("varDec");
+        
         handleKeyword(KeywordType.VAR);
         compileType();
         compileVarName();
@@ -135,12 +154,15 @@ public class CompilationEngine {
         }
         
         handleSymbol(';');
+        
+        closeExp("varDec");
     }
 
     /**
      * Compiles a sequence of statements. Does not handle the enclosing curly brackets.
      */
     public void compileStatements() throws IOException {
+        openExp("statements");
         while (true) {
             if (!tokenizer.hasMoreTokens()) break;
             
@@ -157,17 +179,18 @@ public class CompilationEngine {
                 default: return;
             }
         }
+        closeExp("statements");
     }
 
     /**
      * Compiles a let statement.
      */
     public void compileLet() throws IOException {
+        openExp("letStatement");
         handleKeyword(KeywordType.LET);
-        handleIdentifier(); // var name
+        handleIdentifier();
         
-        // Array access
-        if (tokenizer.symbol() == '[') {
+        if (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == '[') {
             handleSymbol('[');
             compileExpression();
             handleSymbol(']');
@@ -176,12 +199,15 @@ public class CompilationEngine {
         handleSymbol('=');
         compileExpression();
         handleSymbol(';');
+        closeExp("letStatement");
     }
 
     /**
      * Compiles an if statement, possibly with a trailing else clause.
      */
     public void compileIf() throws IOException {
+        openExp("ifStatement");
+        
         handleKeyword(KeywordType.IF);
         handleSymbol('(');
         compileExpression();
@@ -199,12 +225,15 @@ public class CompilationEngine {
             compileStatements();
             handleSymbol('}');
         }
+        
+        closeExp("ifStatement");
     }
 
     /**
      * Compiles a while statement.
      */
     public void compileWhile() throws IOException {
+        openExp("whileStatement");
         handleKeyword(KeywordType.WHILE);
         handleSymbol('(');
         compileExpression();
@@ -212,41 +241,49 @@ public class CompilationEngine {
         handleSymbol('{');
         compileStatements();
         handleSymbol('}');
+        closeExp("whileStatement");
     }
 
     /**
      * Compiles a do statement.
      */
     public void compileDo() throws IOException {
+        openExp("doStatement");
         handleKeyword(KeywordType.DO);
+        handleIdentifier();
         compileSubroutineCall();
         handleSymbol(';');
+        closeExp("doStatement");
     }
 
     /**
      * Compiles a return statement.
      */
     public void compileReturn() throws IOException {
+        openExp("returnStatement");
         handleKeyword(KeywordType.RETURN);
-        if (tokenizer.symbol() != ';') {
+        if (tokenizer.tokenType() != TokenType.SYMBOL || tokenizer.symbol() != ';') {
             compileExpression();
         }
         handleSymbol(';');
+        closeExp("returnStatement");
     }
 
     // Compiles an expression.
     public void compileExpression() throws IOException {
+        openExp("expression");
         compileTerm();
-        
-        while (isOperator(tokenizer.symbol())) {
+        while (tokenizer.tokenType() == TokenType.SYMBOL && isOperator(tokenizer.symbol())) {
             char op = tokenizer.symbol();
             handleSymbol(op);
             compileTerm();
         }
+        closeExp("expression");
     }
 
     // Compiles a term.
     public void compileTerm() throws IOException {
+        openExp("term");
         TokenType type = tokenizer.tokenType();
         
         switch (type) {
@@ -271,7 +308,7 @@ public class CompilationEngine {
                 handleIdentifier();
                 
                 // Look ahead for '[', '(', or '.'
-                if (tokenizer.hasMoreTokens()) {
+                if (tokenizer.hasMoreTokens() && tokenizer.tokenType() == TokenType.SYMBOL) {
                     char symbol = tokenizer.symbol();
                     if (symbol == '[') {
                         // Array access
@@ -299,6 +336,7 @@ public class CompilationEngine {
                 }
                 break;
         }
+        closeExp("term");
     }
 
     /**
@@ -306,21 +344,24 @@ public class CompilationEngine {
      * Returns the number of expressions in the list.
      */
     public int compileExpressionList() throws IOException {
+        openExp("expressionList");
         int count = 0;
         
-        if (tokenizer.symbol() == ')') {
+        if (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ')') {
+            closeExp("expressionList");
             return count;
         }
         
         compileExpression();
         count++;
         
-        while (tokenizer.symbol() == ',') {
+        while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
             handleSymbol(',');
             compileExpression();
             count++;
         }
         
+        closeExp("expressionList");
         return count;
     }
 
@@ -414,11 +455,14 @@ public class CompilationEngine {
     }
 
     private void compileSubroutineCall() throws IOException {
-        if (tokenizer.symbol() == '.') {
-            handleSymbol('.');
-            handleIdentifier();
+        // We've already read the first identifier (either subroutineName or className/varName)
+        // Check if for class/object method calls (called by "." dot)
+        while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == '.') {
+            handleSymbol('.');  // Handle the dot
+            handleIdentifier(); // Handle the method name
         }
         
+        // Now handle the parameter list
         handleSymbol('(');
         compileExpressionList();
         handleSymbol(')');
@@ -458,7 +502,7 @@ public class CompilationEngine {
     
     private void indent() {
         for (int i = 0; i < indentLevel; i++) {
-            writer.print("   ");
+            writer.print("  ");
         }
     }
 

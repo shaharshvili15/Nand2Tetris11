@@ -15,6 +15,8 @@ public class JackTokenizer {
         if (!inputFile.exists()) throw new IOException("File not found: " + inputFile);
         bReader = new BufferedReader(new FileReader(inputFile));
         currentTokenBuilder = new StringBuilder();
+        currentToken = null;
+        currentTokenType = null;
         readChar(); // Load first character
     }
 
@@ -41,8 +43,12 @@ public class JackTokenizer {
             throw new IllegalStateException("Called advance when no more tokens");
         }
 
-        currentTokenBuilder = new StringBuilder();; // Reset the current token
+        currentTokenBuilder = new StringBuilder(); // Reset the current token
         currentTokenType = null; // Reset the current token type
+
+        // Debug: Show current character
+        System.out.println("Current char: '" + currentChar + "' (ASCII: " + (int)currentChar + ")");
+  // end debug 
 
         if (isSymbol(currentChar)) {
             currentTokenType = TokenType.SYMBOL;
@@ -58,18 +64,21 @@ public class JackTokenizer {
         }
 
         currentToken = currentTokenBuilder.toString();
+        // Debug: Show token info
+        System.out.println("Token: '" + currentToken + "' Type: " + currentTokenType);
+        // end debug
     }
 
     private void skipWhitespaceAndComments() throws IOException {
-        while (hasMoreTokens()) {
+        while (currentChar != '\0') {
             // Skip whitespace
-            while (hasMoreTokens() && Character.isWhitespace(currentChar)) {
+            while (currentChar != '\0' && Character.isWhitespace(currentChar)) {
                 readChar();
             }
 
             // Skip single-line comments
             if (currentChar == '/' && peekNext() == '/') {
-                while (hasMoreTokens() && currentChar != '\n') {
+                while (currentChar != '\0' && currentChar != '\n') {
                     readChar();
                 }
                 continue;
@@ -79,7 +88,7 @@ public class JackTokenizer {
             if (currentChar == '/' && peekNext() == '*') {
                 readChar(); // skip /
                 readChar(); // skip *
-                while (hasMoreTokens()) {
+                while (currentChar != '\0') {  // Continue until end of file
                     if (currentChar == '*' && peekNext() == '/') {
                         readChar(); // skip *
                         readChar(); // skip /
@@ -109,7 +118,7 @@ public class JackTokenizer {
     private void handleStringConstant() throws IOException {
         readChar(); // Skip opening quote
         // Build the token
-        while (hasMoreTokens() && currentChar != '"') {
+        while (currentChar != '\0' && currentChar != '"') {
             currentTokenBuilder.append(currentChar);
             readChar();
         }
@@ -118,20 +127,21 @@ public class JackTokenizer {
 
     private void handleIntegerConstant() throws IOException {
         // Build the token
-        while (hasMoreTokens() && Character.isDigit(currentChar)) {
+        while (currentChar != '\0' && Character.isDigit(currentChar)) {
             currentTokenBuilder.append(currentChar);
             readChar();
         }
     }
 
+
     private void handleIdentifierOrKeyword() throws IOException {
-        // Build the token
-        while (hasMoreTokens() && (Character.isLetterOrDigit(currentChar) || currentChar == '_')) {
+        // Build the complete token
+        while (currentChar != '\0' && (Character.isLetterOrDigit(currentChar) || currentChar == '_')) {
             currentTokenBuilder.append(currentChar);
             readChar();
         }
-        
-        // After building the token, check if it's a keyword
+
+        // After building the complete token, check if it's a keyword
         String token = currentTokenBuilder.toString();
         try {
             KeywordType.valueOf(token.toUpperCase());
@@ -146,7 +156,7 @@ public class JackTokenizer {
         if (currentToken == null) {
             throw new IllegalStateException("No current token");
         }
-        return (TokenType.valueOf(currentToken.toUpperCase()));
+        return currentTokenType;
     }
 
     public KeywordType keyword() {
