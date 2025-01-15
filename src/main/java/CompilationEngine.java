@@ -98,7 +98,13 @@ public class CompilationEngine {
         compileParameterList();
         handleSymbol(')');
 
-        // Subroutine body
+        compileSubroutineBody(subroutineType);
+    }
+
+    /**
+     * Compiles a subroutine's body.
+     */
+    private void compileSubroutineBody(KeywordType subroutineType) throws IOException {
         handleSymbol('{');
 
         // Local variables
@@ -421,9 +427,34 @@ public class CompilationEngine {
         }
     }
 
+
     /**
-     * Compiles a subroutine call.
+     * Compiles a (possibly empty) comma-separated list of expressions.
+     * Returns the number of expressions in the list.
      */
+    private int compileExpressionList() throws IOException {
+        int nArgs = 0;
+
+        if (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ')') {
+            return nArgs;
+        }
+
+        compileExpression();
+        nArgs = 1;
+
+        while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
+            handleSymbol(',');
+            compileExpression();
+            nArgs++;
+        }
+
+        return nArgs;
+    }
+
+
+    // Helper methods :
+
+    // Compiles a subroutine call
     private void compileSubroutineCall() throws IOException {
         String identifier = tokenizer.identifier();
         handleIdentifier();
@@ -457,32 +488,6 @@ public class CompilationEngine {
             vmWriter.writeCall(className + "." + identifier, nArgs + compileExpressionList());
         }
     }
-
-    /**
-     * Compiles a (possibly empty) comma-separated list of expressions.
-     * Returns the number of expressions in the list.
-     */
-    private int compileExpressionList() throws IOException {
-        int nArgs = 0;
-
-        if (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ')') {
-            return nArgs;
-        }
-
-        compileExpression();
-        nArgs = 1;
-
-        while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
-            handleSymbol(',');
-            compileExpression();
-            nArgs++;
-        }
-
-        return nArgs;
-    }
-
-
-    // Helper methods :
 
     private void handleKeyword(KeywordType... expected) throws IOException {
         if (tokenizer.tokenType() != TokenType.KEYWORD) {
