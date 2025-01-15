@@ -10,13 +10,11 @@ public class SymbolTable {
     private int varIndex;
     
     private static class Symbol {
-        String name;
         String type;
         String kind;
         int scope;
         
-        Symbol(String name, String type, String kind, int scope) {
-            this.name = name;
+        Symbol(String type, String kind, int scope) {
             this.type = type;
             this.kind = kind;
             this.scope = scope;
@@ -59,7 +57,7 @@ public class SymbolTable {
             default: throw new IllegalArgumentException("Invalid kind: " + kind);
         }
         
-        scope.put(name, new Symbol(name, type, kind, index));
+        scope.put(name, new Symbol(type, kind, index));
     }
 
     /**

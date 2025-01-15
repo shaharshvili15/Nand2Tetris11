@@ -65,7 +65,7 @@ public class VMWriter {
      * Writes a VM function command.
      */
     public void writeFunction(String name, int nLocals) {
-        writer.println("call " + name + " " + nLocals);
+        writer.println("function " + name + " " + nLocals);
     }
 
     /**

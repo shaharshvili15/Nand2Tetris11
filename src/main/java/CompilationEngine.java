@@ -2,19 +2,25 @@ import java.io.*;
 
 public class CompilationEngine {
     private JackTokenizer tokenizer;
-    private PrintWriter writer;
-    private int indentLevel;
+    private VMWriter vmWriter;
+    private SymbolTable symbolTable;
+    private String className;        // Current class name
+    private String currentFunction;  // Current function/method name
+    private int whileCounter;
+    private int ifCounter;
 
     /**
      * Creates a new compilation engine.
      * The next routine called must be compileClass.
+     * Receives the input file and the output file.
      */
     public CompilationEngine(File inputFile, File outputFile) throws IOException {
         tokenizer = new JackTokenizer(inputFile);
-        writer = new PrintWriter(new FileWriter(outputFile));
-        indentLevel = 0;
-        
-        // Get the first token before starting compilation
+        vmWriter = new VMWriter(outputFile.getPath());
+        symbolTable = new SymbolTable();
+        whileCounter = 0;
+        ifCounter = 0;
+
         if (tokenizer.hasMoreTokens()) {
             tokenizer.advance();
         } else {
@@ -26,149 +32,145 @@ public class CompilationEngine {
      * Compiles a complete class.
      */
     public void compileClass() throws IOException {
-        openExp("class");
-        
+        // class className {
         handleKeyword(KeywordType.CLASS);
-        handleIdentifier(); // class name
+        className = tokenizer.identifier();
+        handleIdentifier();
         handleSymbol('{');
 
-        while (tokenizer.hasMoreTokens()) {
-            if (isClassVarDec()) {
-                compileClassVarDec();
-            } else if (isSubroutine()) {
-                compileSubroutine();
-            }
+        // Class variable declarations
+        while (tokenizer.hasMoreTokens() && isClassVarDec()) {
+            compileClassVarDec();
         }
-        writeSymbol('}');  // Handle the final closing brace when we find it
-        closeExp("class");
-        writer.close();
+
+        // Subroutine declarations
+        while (tokenizer.hasMoreTokens() && isSubroutine()) {
+            compileSubroutine();
+        }
+
+        //handleSymbol('}');
+        vmWriter.close();
     }
 
     /**
-     * Compiles a static variable declaration or field declaration.
+     * Compiles a static declaration or a field declaration.
      */
-    public void compileClassVarDec() throws IOException {
-        openExp("classVarDec");
-        
+    private void compileClassVarDec() throws IOException {
         // static or field
+        String kind = tokenizer.keyword().toString();
         handleKeyword(KeywordType.STATIC, KeywordType.FIELD);
-        
-        // type and var names
-        compileType();
-        compileVarName();
-        
-        // additional var names
+
+        String type = getType();
+
         while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
             handleSymbol(',');
-            compileVarName();
+            compileVarName(type, kind);
         }
-        
+
         handleSymbol(';');
-        
-        closeExp("classVarDec");
     }
 
     /**
      * Compiles a complete method, function, or constructor.
      */
-    public void compileSubroutine() throws IOException {
-        openExp("subroutineDec");
-        
-        // subroutine declaration
+    private void compileSubroutine() throws IOException {
+        symbolTable.reset();  // Reset subroutine-level symbol table
+
+        // constructor/function/method
+        KeywordType subroutineType = tokenizer.keyword();
         handleKeyword(KeywordType.CONSTRUCTOR, KeywordType.FUNCTION, KeywordType.METHOD);
-        
-        // return type
-        if (tokenizer.tokenType() == TokenType.KEYWORD) {
-            handleKeyword(KeywordType.VOID, KeywordType.INT, KeywordType.BOOLEAN, KeywordType.CHAR);
-        } else {
-            handleIdentifier(); // class/object name as return type
-        }
-        
-        handleIdentifier(); // subroutine name
+
+        // Return type
+        getType();  // void or type
+
+        // subroutineName
+        String functionName = tokenizer.identifier();
+        currentFunction = className + "." + functionName;
+        handleIdentifier();
+
         handleSymbol('(');
+
+        // If it's a method, add 'this' as first argument
+        if (subroutineType == KeywordType.METHOD) {
+            symbolTable.define("this", className, "ARG");
+        }
+
         compileParameterList();
         handleSymbol(')');
-        
-        compileSubroutineBody();
-        
-        closeExp("subroutineDec");
+
+        // Subroutine body
+        handleSymbol('{');
+
+        // Local variables
+        while (isVarDec()) {
+            compileVarDec();
+        }
+
+        // Write function declaration
+        vmWriter.writeFunction(currentFunction, symbolTable.varCount("VAR"));
+
+        // If constructor, allocate memory for object
+        if (subroutineType == KeywordType.CONSTRUCTOR) {
+            vmWriter.writePush("constant", symbolTable.varCount("FIELD"));
+            vmWriter.writeCall("Memory.alloc", 1);
+            vmWriter.writePop("pointer", 0);
+        }
+        // If method, set up this pointer
+        else if (subroutineType == KeywordType.METHOD) {
+            vmWriter.writePush("argument", 0);
+            vmWriter.writePop("pointer", 0);
+        }
+
+        compileStatements();
+        handleSymbol('}');
     }
 
     /**
      * Compiles a (possibly empty) parameter list. Does not handle the enclosing parentheses.
      */
-    public void compileParameterList() throws IOException {
-        openExp("parameterList");
-        
+    private void compileParameterList() throws IOException {
         if (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ')') {
-            closeExp("parameterList");
-            return; // empty parameter list
+            return;
         }
 
         // First parameter
-        compileType();
-        compileVarName();
+        String type = getType();
+        compileVarName(type, "ARG");
 
         // Additional parameters
         while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
             handleSymbol(',');
-            compileType();
-            compileVarName();
+            type = getType();
+            compileVarName(type, "ARG");
         }
-        
-        closeExp("parameterList");
-    }
-
-    /**
-     * Compiles a subroutine's body.
-     */
-    public void compileSubroutineBody() throws IOException {
-        openExp("subroutineBody");
-        
-        handleSymbol('{');
-        
-        // Local variables
-        while (isVarDec()) {
-            compileVarDec();
-        }
-        
-        compileStatements();
-        handleSymbol('}');
-        
-        closeExp("subroutineBody");
     }
 
     /**
      * Compiles a var declaration.
      */
-    public void compileVarDec() throws IOException {
-        openExp("varDec");
-        
+    private void compileVarDec() throws IOException {
         handleKeyword(KeywordType.VAR);
-        compileType();
-        compileVarName();
-        
-        while (tokenizer.symbol() == ',') {
+        String type = getType();
+        compileVarName(type, "VAR");
+
+        while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
             handleSymbol(',');
-            compileVarName();
+            compileVarName(type, "VAR");
         }
-        
+
         handleSymbol(';');
-        
-        closeExp("varDec");
     }
 
     /**
      * Compiles a sequence of statements. Does not handle the enclosing curly brackets.
      */
-    public void compileStatements() throws IOException {
-        openExp("statements");
+    private void compileStatements() throws IOException {
         while (true) {
             if (!tokenizer.hasMoreTokens()) break;
-            
+
             TokenType type = tokenizer.tokenType();
             if (type != TokenType.KEYWORD) break;
-            
+
             KeywordType keyword = tokenizer.keyword();
             switch (keyword) {
                 case LET: compileLet(); break;
@@ -179,130 +181,189 @@ public class CompilationEngine {
                 default: return;
             }
         }
-        closeExp("statements");
     }
 
     /**
      * Compiles a let statement.
      */
-    public void compileLet() throws IOException {
-        openExp("letStatement");
+    private void compileLet() throws IOException {
         handleKeyword(KeywordType.LET);
+        String varName = tokenizer.identifier();
         handleIdentifier();
-        
+
+        boolean isArray = false;
         if (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == '[') {
+            isArray = true;
             handleSymbol('[');
             compileExpression();
             handleSymbol(']');
+
+            // Push base address
+            String kind = symbolTable.kindOf(varName);
+            int index = symbolTable.indexOf(varName);
+            vmWriter.writePush(segmentForKind(kind), index);
+
+            // Add index to base address
+            vmWriter.writeArithmetic("add");
         }
-        
+
         handleSymbol('=');
         compileExpression();
         handleSymbol(';');
-        closeExp("letStatement");
+
+        if (isArray) {
+            vmWriter.writePop("temp", 0);     // Save value
+            vmWriter.writePop("pointer", 1);   // Set THAT
+            vmWriter.writePush("temp", 0);     // Restore value
+            vmWriter.writePop("that", 0);      // Store value
+        } else {
+            String kind = symbolTable.kindOf(varName);
+            int index = symbolTable.indexOf(varName);
+            vmWriter.writePop(segmentForKind(kind), index);
+        }
     }
 
     /**
-     * Compiles an if statement, possibly with a trailing else clause.
+     * Compiles an if statement.
      */
-    public void compileIf() throws IOException {
-        openExp("ifStatement");
-        
+    private void compileIf() throws IOException {
+        String labelStart = "IF_" + ifCounter;
+        String labelEnd = "IF_END_" + ifCounter;
+        ifCounter++;
+
         handleKeyword(KeywordType.IF);
         handleSymbol('(');
         compileExpression();
         handleSymbol(')');
+
+        vmWriter.writeIf(labelStart);    // If condition is true, skip the goto to else
         
         handleSymbol('{');
         compileStatements();
         handleSymbol('}');
-        
-        // Optional else clause
-        if (tokenizer.hasMoreTokens() && tokenizer.tokenType() == TokenType.KEYWORD 
-            && tokenizer.keyword() == KeywordType.ELSE) {
+
+        if (tokenizer.tokenType() == TokenType.KEYWORD && tokenizer.keyword() == KeywordType.ELSE) {
+            vmWriter.writeGoto(labelEnd);
+            vmWriter.writeLabel(labelStart);
             handleKeyword(KeywordType.ELSE);
             handleSymbol('{');
             compileStatements();
             handleSymbol('}');
+            vmWriter.writeLabel(labelEnd);
+        } else {
+            vmWriter.writeLabel(labelStart);
         }
-        
-        closeExp("ifStatement");
     }
 
     /**
      * Compiles a while statement.
      */
-    public void compileWhile() throws IOException {
-        openExp("whileStatement");
+    private void compileWhile() throws IOException {
+        String labelLoop = "WHILE_START" + whileCounter;
+        String labelEnd = "WHILE_END" + whileCounter;
+        whileCounter++;
+
+        vmWriter.writeLabel(labelLoop);
+
         handleKeyword(KeywordType.WHILE);
         handleSymbol('(');
         compileExpression();
         handleSymbol(')');
+
+        vmWriter.writeArithmetic("not");
+        vmWriter.writeIf(labelEnd);
+
         handleSymbol('{');
         compileStatements();
         handleSymbol('}');
-        closeExp("whileStatement");
+
+        vmWriter.writeGoto(labelLoop);
+        vmWriter.writeLabel(labelEnd);
     }
 
     /**
      * Compiles a do statement.
      */
-    public void compileDo() throws IOException {
-        openExp("doStatement");
+    private void compileDo() throws IOException {
         handleKeyword(KeywordType.DO);
-        handleIdentifier();
         compileSubroutineCall();
         handleSymbol(';');
-        closeExp("doStatement");
+        vmWriter.writePop("temp", 0);  // Discard return value
     }
 
     /**
      * Compiles a return statement.
      */
-    public void compileReturn() throws IOException {
-        openExp("returnStatement");
+    private void compileReturn() throws IOException {
         handleKeyword(KeywordType.RETURN);
         if (tokenizer.tokenType() != TokenType.SYMBOL || tokenizer.symbol() != ';') {
             compileExpression();
+        } else {
+            vmWriter.writePush("constant", 0);
         }
         handleSymbol(';');
-        closeExp("returnStatement");
+        vmWriter.writeReturn();
     }
 
-    // Compiles an expression.
-    public void compileExpression() throws IOException {
-        openExp("expression");
+    /**
+     * Compiles an expression.
+     */
+    private void compileExpression() throws IOException {
         compileTerm();
+
         while (tokenizer.tokenType() == TokenType.SYMBOL && isOperator(tokenizer.symbol())) {
-            char op = tokenizer.symbol();
-            handleSymbol(op);
+            char operator = tokenizer.symbol();
+            handleSymbol(operator);
             compileTerm();
+            writeOperator(operator);
         }
-        closeExp("expression");
     }
 
-    // Compiles a term.
-    public void compileTerm() throws IOException {
-        openExp("term");
+    /**
+     * Compiles a term.
+     */
+    private void compileTerm() throws IOException {
         TokenType type = tokenizer.tokenType();
-        
+
         switch (type) {
             case INT_CONST:
+                vmWriter.writePush("constant", tokenizer.intVal());
                 handleIntegerConstant();
                 break;
-                
+
             case STRING_CONST:
+                String strVal = tokenizer.stringVal();
+                vmWriter.writePush("constant", strVal.length());
+                vmWriter.writeCall("String.new", 1);
+                for (char c : strVal.toCharArray()) {
+                    vmWriter.writePush("constant", (int)c);
+                    vmWriter.writeCall("String.appendChar", 2);
+                }
                 handleStringConstant();
                 break;
-                
+
             case KEYWORD:
                 KeywordType keyword = tokenizer.keyword();
-                if (keyword == KeywordType.TRUE || keyword == KeywordType.FALSE || 
-                    keyword == KeywordType.NULL || keyword == KeywordType.THIS) {
-                    handleKeyword(keyword);
+                switch (keyword) {
+                    case TRUE:
+                        vmWriter.writePush("constant", 0);
+                        vmWriter.writeArithmetic("not");
+                        break;
+                    case FALSE:
+                        vmWriter.writePush("constant", 0);
+                        break;
+                    case NULL:
+                        vmWriter.writePush("constant", 0);
+                        break;
+                    case THIS:
+                        vmWriter.writePush("pointer", 0);
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Unexpected keyword in expression: " + keyword);
                 }
+                handleKeyword(keyword);
                 break;
-                
+
             case IDENTIFIER:
                 String identifier = tokenizer.identifier();
                 handleIdentifier();
@@ -315,13 +376,30 @@ public class CompilationEngine {
                         handleSymbol('[');
                         compileExpression();
                         handleSymbol(']');
+
+                        String kind = symbolTable.kindOf(identifier);
+                        int index = symbolTable.indexOf(identifier);
+                        vmWriter.writePush(segmentForKind(kind), index);
+                        vmWriter.writeArithmetic("add");
+                        vmWriter.writePop("pointer", 1);
+                        vmWriter.writePush("that", 0);
                     } else if (symbol == '(' || symbol == '.') {
                         // Subroutine call
-                        compileSubroutineCall();
+                        compileSubroutineCall(identifier);
+                    } else {
+                        // Variable
+                        String kind = symbolTable.kindOf(identifier);
+                        int index = symbolTable.indexOf(identifier);
+                        vmWriter.writePush(segmentForKind(kind), index);
                     }
+                } else {
+                    // Variable
+                    String kind = symbolTable.kindOf(identifier);
+                    int index = symbolTable.indexOf(identifier);
+                    vmWriter.writePush(segmentForKind(kind), index);
                 }
                 break;
-                
+
             case SYMBOL:
                 char symbol = tokenizer.symbol();
                 if (symbol == '(') {
@@ -333,36 +411,74 @@ public class CompilationEngine {
                     // Unary operation
                     handleSymbol(symbol);
                     compileTerm();
+                    if (symbol == '-') {
+                        vmWriter.writeArithmetic("neg");
+                    } else {
+                        vmWriter.writeArithmetic("not");
+                    }
                 }
                 break;
         }
-        closeExp("term");
+    }
+
+    /**
+     * Compiles a subroutine call.
+     */
+    private void compileSubroutineCall() throws IOException {
+        String identifier = tokenizer.identifier();
+        handleIdentifier();
+        compileSubroutineCall(identifier);
+    }
+
+    private void compileSubroutineCall(String identifier) throws IOException {
+        int nArgs = 0;
+        
+        if (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == '.') {
+            handleSymbol('.');
+            String methodName = tokenizer.identifier();
+            handleIdentifier();
+            
+            // Check if identifier is a variable name in our symbol table
+            String kind = symbolTable.kindOf(identifier);
+            if (!kind.equals("NONE")) {
+                // Case 1: object.method()
+                String className = symbolTable.typeOf(identifier);
+                vmWriter.writePush(kind.toLowerCase(), symbolTable.indexOf(identifier));
+                nArgs = 1;  // this object is first argument
+                vmWriter.writeCall(className + "." + methodName, nArgs + compileExpressionList());
+            } else {
+                // Case 2: Class.function()
+                vmWriter.writeCall(identifier + "." + methodName, compileExpressionList());
+            }
+        } else {
+            // Case 3: method() - method call within same class
+            vmWriter.writePush("pointer", 0);  // push this
+            nArgs = 1;
+            vmWriter.writeCall(className + "." + identifier, nArgs + compileExpressionList());
+        }
     }
 
     /**
      * Compiles a (possibly empty) comma-separated list of expressions.
      * Returns the number of expressions in the list.
      */
-    public int compileExpressionList() throws IOException {
-        openExp("expressionList");
-        int count = 0;
-        
+    private int compileExpressionList() throws IOException {
+        int nArgs = 0;
+
         if (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ')') {
-            closeExp("expressionList");
-            return count;
+            return nArgs;
         }
-        
+
         compileExpression();
-        count++;
-        
+        nArgs = 1;
+
         while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
             handleSymbol(',');
             compileExpression();
-            count++;
+            nArgs++;
         }
-        
-        closeExp("expressionList");
-        return count;
+
+        return nArgs;
     }
 
 
@@ -372,7 +488,7 @@ public class CompilationEngine {
         if (tokenizer.tokenType() != TokenType.KEYWORD) {
             throw new IllegalStateException("Expected keyword, got " + tokenizer.tokenType());
         }
-        
+
         KeywordType currentKeywordType = tokenizer.keyword();
         boolean found = false;
         for (KeywordType exp : expected) {
@@ -381,12 +497,11 @@ public class CompilationEngine {
                 break;
             }
         }
-        
+
         if (!found) {
             throw new IllegalStateException("Expected one of the keywords: " + expected + ", got " + currentKeywordType);
         }
-        
-        writeKeyword(currentKeywordType);
+
         tokenizer.advance();
     }
 
@@ -394,7 +509,6 @@ public class CompilationEngine {
         if (tokenizer.tokenType() != TokenType.SYMBOL || tokenizer.symbol() != expected) {
             throw new IllegalStateException("Expected symbol '" + expected + "', got " + tokenizer.tokenType());
         }
-        writeSymbol(tokenizer.symbol());
         tokenizer.advance();
     }
 
@@ -402,7 +516,6 @@ public class CompilationEngine {
         if (tokenizer.tokenType() != TokenType.IDENTIFIER) {
             throw new IllegalStateException("Expected identifier, got " + tokenizer.tokenType());
         }
-        writeIdentifier(tokenizer.identifier());
         tokenizer.advance();
     }
 
@@ -410,7 +523,6 @@ public class CompilationEngine {
         if (tokenizer.tokenType() != TokenType.INT_CONST) {
             throw new IllegalStateException("Expected integer constant, got " + tokenizer.tokenType());
         }
-        writeIntegerConstant(tokenizer.intVal());
         tokenizer.advance();
     }
 
@@ -418,104 +530,70 @@ public class CompilationEngine {
         if (tokenizer.tokenType() != TokenType.STRING_CONST) {
             throw new IllegalStateException("Expected string constant, got " + tokenizer.tokenType());
         }
-        writeStringConstant(tokenizer.stringVal());
         tokenizer.advance();
     }
 
+    private String getType() throws IOException {
+        String type;
+        if (tokenizer.tokenType() == TokenType.KEYWORD) {
+            type = tokenizer.keyword().toString();
+            handleKeyword(KeywordType.INT, KeywordType.CHAR, KeywordType.BOOLEAN, KeywordType.VOID);
+        } else {
+            type = tokenizer.identifier();
+            handleIdentifier();
+        }
+        return type;
+    }
+
     private boolean isClassVarDec() throws IOException {
-        return tokenizer.tokenType() == TokenType.KEYWORD && 
-               (tokenizer.keyword() == KeywordType.STATIC || tokenizer.keyword() == KeywordType.FIELD);
+        return tokenizer.tokenType() == TokenType.KEYWORD &&
+               (tokenizer.keyword() == KeywordType.STATIC ||
+                tokenizer.keyword() == KeywordType.FIELD);
     }
 
     private boolean isSubroutine() throws IOException {
-        return tokenizer.tokenType() == TokenType.KEYWORD && 
-               (tokenizer.keyword() == KeywordType.CONSTRUCTOR || 
-                tokenizer.keyword() == KeywordType.FUNCTION || 
+        return tokenizer.tokenType() == TokenType.KEYWORD &&
+               (tokenizer.keyword() == KeywordType.CONSTRUCTOR ||
+                tokenizer.keyword() == KeywordType.FUNCTION ||
                 tokenizer.keyword() == KeywordType.METHOD);
     }
 
     private boolean isVarDec() throws IOException {
-        return tokenizer.tokenType() == TokenType.KEYWORD && tokenizer.keyword() == KeywordType.VAR;
+        return tokenizer.tokenType() == TokenType.KEYWORD &&
+               tokenizer.keyword() == KeywordType.VAR;
     }
 
     private boolean isOperator(char c) {
         return "+-*/&|<>=".indexOf(c) != -1;
     }
 
-    private void compileType() throws IOException {
-        if (tokenizer.tokenType() == TokenType.KEYWORD) {
-            handleKeyword(KeywordType.INT, KeywordType.CHAR, KeywordType.BOOLEAN);
-        } else {
-            handleIdentifier(); // class/object name as type
+    private void writeOperator(char operator) {
+        switch (operator) {
+            case '+': vmWriter.writeArithmetic("add"); break;
+            case '-': vmWriter.writeArithmetic("sub"); break;
+            case '*': vmWriter.writeCall("Math.multiply", 2); break;
+            case '/': vmWriter.writeCall("Math.divide", 2); break;
+            case '&': vmWriter.writeArithmetic("and"); break;
+            case '|': vmWriter.writeArithmetic("or"); break;
+            case '<': vmWriter.writeArithmetic("lt"); break;
+            case '>': vmWriter.writeArithmetic("gt"); break;
+            case '=': vmWriter.writeArithmetic("eq"); break;
         }
     }
 
-    private void compileVarName() throws IOException {
+    private String segmentForKind(String kind) {
+        switch (kind) {
+            case "STATIC": return "static";
+            case "FIELD": return "this";
+            case "ARG": return "argument";
+            case "VAR": return "local";
+            default: throw new IllegalArgumentException("Invalid kind: " + kind);
+        }
+    }
+
+    private void compileVarName(String type, String kind) throws IOException {
+        String name = tokenizer.identifier();
+        symbolTable.define(name, type, kind);
         handleIdentifier();
     }
-
-    private void compileSubroutineCall() throws IOException {
-        // We've already read the first identifier (either subroutineName or className/varName)
-        // Check if for class/object method calls (called by "." dot)
-        while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == '.') {
-            handleSymbol('.');  // Handle the dot
-            handleIdentifier(); // Handle the method name
-        }
-        
-        // Now handle the parameter list
-        handleSymbol('(');
-        compileExpressionList();
-        handleSymbol(')');
-    }
-
-    private void writeKeyword(KeywordType keyword) {
-        indent();
-        writer.println("<keyword> " + keyword.toString().toLowerCase() + " </keyword>");
-    }
-
-    private void writeSymbol(char symbol) {
-        indent();
-        // Handle special XML characters
-        String symbolStr = String.valueOf(symbol);
-        switch (symbol) {
-            case '<': symbolStr = "&lt;"; break;
-            case '>': symbolStr = "&gt;"; break;
-            case '&': symbolStr = "&amp;"; break;
-        }
-        writer.println("<symbol> " + symbolStr + " </symbol>");
-    }
-
-    private void writeIdentifier(String identifier) {
-        indent();
-        writer.println("<identifier> " + identifier + " </identifier>");
-    }
-
-    private void writeIntegerConstant(int value) {
-        indent();
-        writer.println("<integerConstant> " + value + " </integerConstant>");
-    }
-
-    private void writeStringConstant(String str) {
-        indent();
-        writer.println("<stringConstant> " + str + " </stringConstant>");
-    }
-    
-    private void indent() {
-        for (int i = 0; i < indentLevel; i++) {
-            writer.print("  ");
-        }
-    }
-
-    private void openExp(String name) {
-        indent();
-        writer.println("<" + name + ">");
-        indentLevel++;
-    }
-
-    private void closeExp(String name) {
-        indentLevel--;
-        indent();
-        writer.println("</" + name + ">");
-    }
-
 }

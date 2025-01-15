@@ -1,11 +1,10 @@
 import java.io.File;
 import java.io.IOException;
-import java.io.FilenameFilter;
 
-public class JackAnalyzer {
+public class JackCompiler {
     public static void main(String[] args) {
         if (args.length != 1) {
-            System.err.println("Usage: java JackAnalyzer <input file/directory>");
+            System.err.println("Usage: java JackCompiler <input file/directory>");
             System.exit(1);
         }
 
@@ -20,7 +19,7 @@ public class JackAnalyzer {
                 if (!input.getName().endsWith(".jack")) {
                     throw new IOException("Input file must have .jack extension");
                 }
-                analyzeFile(input);
+                compileFile(input);
             } else {
                 File[] jackFiles = input.listFiles((directory, fileName) -> fileName.endsWith(".jack"));
 
@@ -28,7 +27,7 @@ public class JackAnalyzer {
                     throw new IOException("No .jack files found in directory: " + input);
                 }
                 for (File jackFile : jackFiles) {
-                    analyzeFile(jackFile);
+                    compileFile(jackFile);
                 }
             }
         } catch (IOException e) {
@@ -37,10 +36,10 @@ public class JackAnalyzer {
         }
     }
 
-    private static void analyzeFile(File inputFile) throws IOException {
-        // Create output file with .xml suffix
+    private static void compileFile(File inputFile) throws IOException {
+        // Create output file with .vm suffix instead of .xml
         String outputPath = inputFile.getAbsolutePath();
-        outputPath = outputPath.substring(0, outputPath.lastIndexOf(".")) + ".xml";
+        outputPath = outputPath.substring(0, outputPath.lastIndexOf(".")) + ".vm";
         File outputFile = new File(outputPath);
 
         // Create compilation engine and compile the class
