@@ -6,7 +6,7 @@ public class Main {
         // }
         // Pass the argument to JackAnalyzer
         // JackCompiler.main(args);
-        JackCompiler.main(new String[]{"Tests/Seven"});
-
+        //JackCompiler.main(new String[]{"Tests/Seven"});
+        JackCompiler.main(new String[]{"Tests/ConvertToBin"});
     }
 }

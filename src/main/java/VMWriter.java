@@ -4,6 +4,7 @@ import java.io.PrintWriter;
 
 public class VMWriter {
     private PrintWriter writer;
+    private static final String INDENT = "    ";  // 4 spaces for indentation
 
     /**
      * Creates a new output .vm file and prepares it for writing.
@@ -16,21 +17,21 @@ public class VMWriter {
      * Writes a VM push command.
      */
     public void writePush(String segment, int index) {
-        writer.println("push " + segment.toLowerCase() + " " + index);
+        writer.println(INDENT + "push " + segment + " " + index);
     }
 
     /**
      * Writes a VM pop command.
      */
     public void writePop(String segment, int index) {
-        writer.println("pop " + segment.toLowerCase() + " " + index);
+        writer.println(INDENT + "pop " + segment + " " + index);
     }
 
     /**
      * Writes a VM arithmetic/logical command.
      */
     public void writeArithmetic(String command) {
-        writer.println(command.toLowerCase());
+        writer.println(INDENT + command);
     }
 
     /**
@@ -44,21 +45,21 @@ public class VMWriter {
      * Writes a VM goto command.
      */
     public void writeGoto(String label) {
-        writer.println("goto " + label);
+        writer.println(INDENT + "goto " + label);
     }
 
     /**
      * Writes a VM if-goto command.
      */
     public void writeIf(String label) {
-        writer.println("if-goto " + label);
+        writer.println(INDENT + "if-goto " + label);
     }
 
     /**
      * Writes a VM call command.
      */
     public void writeCall(String name, int nArgs) {
-        writer.println("call " + name + " " + nArgs);
+        writer.println(INDENT + "call " + name + " " + nArgs);
     }
 
     /**
@@ -72,7 +73,7 @@ public class VMWriter {
      * Writes a VM return command.
      */
     public void writeReturn() {
-        writer.println("return");
+        writer.println(INDENT + "return");
     }
 
     /**
