@@ -1,3 +1,5 @@
+import java.io.File;
+
 public class Main {
     public static void main(String[] args) {
         // if (args.length != 1) {
@@ -7,7 +9,12 @@ public class Main {
         // Pass the argument to JackAnalyzer
         // JackCompiler.main(args);
         //JackCompiler.main(new String[]{"Tests/Seven"});
-        //JackCompiler.main(new String[]{"Tests/ConvertToBin"});
-        JackCompiler.main(new String[]{"Tests/Square"});
+//        JackCompiler.main(new String[]{"Tests/myTest"});
+
+        // to run all files:
+        for (File file : new File("Tests").listFiles()) {
+            System.out.println(file.getAbsolutePath());
+            JackCompiler.main(new String[]{file.getAbsolutePath()});
+        }
     }
 }
