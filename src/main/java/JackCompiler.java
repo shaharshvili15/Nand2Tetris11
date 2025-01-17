@@ -7,27 +7,21 @@ public class JackCompiler {
             System.err.println("Usage: java JackCompiler <input file/directory>");
             System.exit(1);
         }
-
         try {
             File input = new File(args[0]);
             if (!input.exists()) {
                 throw new IOException("Input file/directory does not exist: " + input);
             }
-
-            if (input.isFile()) {
+            if (input.isFile() && input.getName().endsWith(".jack")) {
                 // Handle single file
-                if (!input.getName().endsWith(".jack")) {
-                    throw new IOException("Input file must have .jack extension");
-                }
                 compileFile(input);
             } else {
                 File[] jackFiles = input.listFiles((directory, fileName) -> fileName.endsWith(".jack"));
-
-                if (jackFiles == null || jackFiles.length == 0) {
-                    throw new IOException("No .jack files found in directory: " + input);
-                }
-                for (File jackFile : jackFiles) {
-                    compileFile(jackFile);
+                if (jackFiles != null) {
+                    for (File jackFile : jackFiles) {
+                        compileFile(jackFile);
+                        System.out.println("Compiled: " + jackFile.getName());
+                    }
                 }
             }
         } catch (IOException e) {
