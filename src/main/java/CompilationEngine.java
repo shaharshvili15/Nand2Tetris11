@@ -7,6 +7,7 @@ public class CompilationEngine {
     private String className;        // Current class name
     private String currentFunction;  // Current function/method name
     private int ifWhileCounter;
+
     /**
      * Creates a new compilation engine.
      * The next routine called must be compileClass.
@@ -522,14 +523,6 @@ public class CompilationEngine {
     }
 
     private void handleSymbol(char expected) throws IOException {
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////
-//        System.out.println("handleSymbol: expecting '" + expected + "'");
-//        System.out.println("Current token type: " + tokenizer.tokenType());
-//        if (tokenizer.tokenType() == TokenType.SYMBOL) {
-//            System.out.println("Current symbol: '" + tokenizer.symbol() + "'");
-//        }
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////
-
         if (tokenizer.tokenType() != TokenType.SYMBOL || tokenizer.symbol() != expected) {
             throw new IllegalStateException(
                 String.format("Expected symbol '%c', got %s (current symbol: %c)", 
