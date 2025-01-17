@@ -64,8 +64,13 @@ public class CompilationEngine {
         String kind = tokenizer.keyword().toString();
         handleKeyword(KeywordType.STATIC, KeywordType.FIELD);
 
+        // Get type
         String type = getType();
+        
+        // Get first variable name
+        compileVarName(type, kind);
 
+        // Handle additional variable names
         while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
             handleSymbol(',');
             compileVarName(type, kind);
