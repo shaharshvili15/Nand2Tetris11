@@ -33,16 +33,12 @@ label Main_0
     gt
     not
     not
-    not
-    not
     if-goto Main_0
     push argument 0
     push local 0
     and
     push constant 0
     eq
-    not
-    not
     not
     not
     if-goto Main_1
@@ -75,8 +71,6 @@ function Main.nextMask 0
     push constant 0
     eq
     not
-    not
-    not
     if-goto Main_2
     push constant 1
     return
@@ -92,8 +86,6 @@ label Main_1
     push argument 1
     push constant 0
     gt
-    not
-    not
     not
     if-goto Main_2
     push argument 0

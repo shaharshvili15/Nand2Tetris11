@@ -342,11 +342,6 @@ public class CompilationEngine {
                 case '>': vmWriter.writeArithmetic("gt"); break;
                 case '=': vmWriter.writeArithmetic("eq"); break;
             }
-            // Only add not for comparison operators when needed
-            if (operator == '>' || operator == '<' || operator == '=') {
-                vmWriter.writeArithmetic("not");
-                vmWriter.writeArithmetic("not");
-            }
         }
     }
 
