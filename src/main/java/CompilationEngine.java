@@ -6,13 +6,7 @@ public class CompilationEngine {
     private SymbolTable symbolTable;
     private String className;        // Current class name
     private String currentFunction;  // Current function/method name
-    private int whileCounter;
-    private int ifCounter;
-    private boolean inFunctionCall = false;
-    private int labelCounter = 0;
-    private boolean lastOperationWasComparison = false;
-    private int functionLabelCounter = 0;  // Add this field for function-level labels
-
+    private int ifWhileCounter;
     /**
      * Creates a new compilation engine.
      * The next routine called must be compileClass.
@@ -22,8 +16,7 @@ public class CompilationEngine {
         tokenizer = new JackTokenizer(inputFile);
         vmWriter = new VMWriter(outputFile.getPath());
         symbolTable = new SymbolTable();
-        whileCounter = 0;
-        ifCounter = 0;
+        ifWhileCounter = 0;
 
         if (tokenizer.hasMoreTokens()) {
             tokenizer.advance();
@@ -52,7 +45,7 @@ public class CompilationEngine {
             compileSubroutine();
         }
 
-        //handleSymbol('}');
+        // handleSymbol('}');
         vmWriter.close();
     }
 
@@ -240,9 +233,9 @@ public class CompilationEngine {
      * Compiles an if statement.
      */
     private void compileIf() throws IOException {
-        int thisIfCounter = ifCounter++;
-        String labelL1 = className + "_" + thisIfCounter;
-        String labelL2 = className + "_" + (thisIfCounter + 1);
+        String labelL1 = className + "_" + ifWhileCounter;
+        String labelL2 = className + "_" + (ifWhileCounter + 1);
+        ifWhileCounter+=2;
 
         handleKeyword(KeywordType.IF);
         handleSymbol('(');
@@ -250,14 +243,14 @@ public class CompilationEngine {
         handleSymbol(')');
 
         vmWriter.writeArithmetic("not");
-        vmWriter.writeIf(labelL1);
+        vmWriter.writeIf(labelL2);
 
         handleSymbol('{');
         compileStatements();
         handleSymbol('}');
 
-        vmWriter.writeGoto(labelL2);
-        vmWriter.writeLabel(labelL1);
+        vmWriter.writeGoto(labelL1);
+        vmWriter.writeLabel(labelL2);
 
         // Handle else part if it exists
         if (tokenizer.tokenType() == TokenType.KEYWORD && tokenizer.keyword() == KeywordType.ELSE) {
@@ -266,16 +259,16 @@ public class CompilationEngine {
             compileStatements();
             handleSymbol('}');
         }
-        vmWriter.writeLabel(labelL2);
+        vmWriter.writeLabel(labelL1);
     }
 
     /**
      * Compiles a while statement.
      */
     private void compileWhile() throws IOException {
-        int thisWhileCounter = whileCounter++;
-        String labelL1 = className + "_" + thisWhileCounter;
-        String labelL2 = className + "_" + (thisWhileCounter + 1);
+        String labelL1 = className + "_" + ifWhileCounter;
+        String labelL2 = className + "_" + (ifWhileCounter + 1);
+        ifWhileCounter += 2;
 
         handleKeyword(KeywordType.WHILE);
         
@@ -448,31 +441,26 @@ public class CompilationEngine {
      * Returns the number of expressions in the list.
      */
     private int compileExpressionList() throws IOException {
-        inFunctionCall = true;  // Set the flag before processing arguments
-        try {
-            int nArgs = 0;
+        int nArgs = 0;
 
-            handleSymbol('(');  // Handle opening parenthesis here
+        handleSymbol('(');  // Handle opening parenthesis here
 
-            if (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ')') {
-                handleSymbol(')');
-                return nArgs;
-            }
-
-            compileExpression();
-            nArgs = 1;
-
-            while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
-                handleSymbol(',');
-                compileExpression();
-                nArgs++;
-            }
-
-            handleSymbol(')');  // Handle closing parenthesis here
+        if (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ')') {
+            handleSymbol(')');
             return nArgs;
-        } finally {
-            inFunctionCall = false;  // Reset the flag after processing
         }
+
+        compileExpression();
+        nArgs = 1;
+
+        while (tokenizer.tokenType() == TokenType.SYMBOL && tokenizer.symbol() == ',') {
+            handleSymbol(',');
+            compileExpression();
+            nArgs++;
+        }
+
+        handleSymbol(')');  // Handle closing parenthesis here
+        return nArgs;
     }
 
     // Helper methods :
@@ -534,11 +522,13 @@ public class CompilationEngine {
     }
 
     private void handleSymbol(char expected) throws IOException {
-        System.out.println("handleSymbol: expecting '" + expected + "'");
-        System.out.println("Current token type: " + tokenizer.tokenType());
-        if (tokenizer.tokenType() == TokenType.SYMBOL) {
-            System.out.println("Current symbol: '" + tokenizer.symbol() + "'");
-        }
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////
+//        System.out.println("handleSymbol: expecting '" + expected + "'");
+//        System.out.println("Current token type: " + tokenizer.tokenType());
+//        if (tokenizer.tokenType() == TokenType.SYMBOL) {
+//            System.out.println("Current symbol: '" + tokenizer.symbol() + "'");
+//        }
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         if (tokenizer.tokenType() != TokenType.SYMBOL || tokenizer.symbol() != expected) {
             throw new IllegalStateException(
@@ -620,21 +610,5 @@ public class CompilationEngine {
         String name = tokenizer.identifier();
         symbolTable.define(name, type, kind);
         handleIdentifier();
-    }
-
-    private boolean isInFunctionCall() {
-        return inFunctionCall;
-    }
-
-    private String generateLabel() {
-        String label = className + "_" + functionLabelCounter++;
-        System.out.println("Generated label: " + label);  // Debug statement
-        return label;
-    }
-
-    private void handleCondition() throws IOException {
-        compileExpression();
-        vmWriter.writeArithmetic("not");
-        vmWriter.writeArithmetic("not");
     }
 }
